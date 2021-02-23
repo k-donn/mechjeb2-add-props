@@ -1,0 +1,200 @@
+diff --git a/Localization/en-us.cfg b/Localization/en-us.cfg
+index 78698a41..1415debe 100644
+--- a/Localization/en-us.cfg
++++ b/Localization/en-us.cfg
+@@ -554,6 +554,9 @@ Localization
+         #MechJeb_Flightrecord_checkbox6 = Acceleration
+         #MechJeb_Flightrecord_checkbox7 = Surface speed
+         #MechJeb_Flightrecord_checkbox8 = Orbital speed
++        #MechJeb_Flightrecord_checkbox32 = Vertical Speed
++        #MechJeb_Flightrecord_checkbox34 = Surface Horizontal Speed
++        #MechJeb_Flightrecord_checkbox36 = Orbital Horizontal Speed
+         #MechJeb_Flightrecord_checkbox9 = Mass
+         #MechJeb_Flightrecord_checkbox10 = Q
+         #MechJeb_Flightrecord_checkbox11 = AoA
+@@ -577,6 +580,9 @@ Localization
+         #MechJeb_Flightrecord_checkbox29 = Gravity Loss
+         #MechJeb_Flightrecord_checkbox30 = Drag Loss
+         #MechJeb_Flightrecord_checkbox31 = Steering Loss
++        #MechJeb_Flightrecord_checkbox33 = VertVel
++        #MechJeb_Flightrecord_checkbox35 = SrfHorzVel
++        #MechJeb_Flightrecord_checkbox37 = ObtHorzVel
+ 
+         #MechJeb_Flightrecord_Label1 = Time <<1>>
+         #MechJeb_Flightrecord_Label2 = Downrange <<1>>
+diff --git a/MechJeb2/MechJebModuleFlightRecorder.cs b/MechJeb2/MechJebModuleFlightRecorder.cs
+index 421fb2eb..8f89dbcf 100644
+--- a/MechJeb2/MechJebModuleFlightRecorder.cs
++++ b/MechJeb2/MechJebModuleFlightRecorder.cs
+@@ -17,6 +17,9 @@ public struct record
+             public double downRange;
+             public double speedSurface;
+             public double speedOrbital;
++            public double speedVertical; // same for orbital and surface
++            public double speedSurfaceHorizontal;
++            public double speedOrbitHorizontal;
+             public double acceleration;
+             public double Q;
+             public double AoA;
+@@ -48,6 +51,12 @@ public struct record
+                             return speedSurface;
+                         case recordType.SpeedOrbital:
+                             return speedOrbital;
++                        case recordType.SpeedVertical:
++                            return speedVertical;
++                        case recordType.SpeedSurfaceHorizontal:
++                            return speedSurfaceHorizontal;
++                        case recordType.SpeedOrbitHorizontal:
++                            return speedOrbitHorizontal;
+                         case recordType.Mass:
+                             return mass;
+                         case recordType.Acceleration:
+@@ -87,6 +96,9 @@ public enum recordType
+             DownRange,
+             SpeedSurface,
+             SpeedOrbital,
++            SpeedVertical,
++            SpeedSurfaceHorizontal,
++            SpeedOrbitHorizontal,
+             Mass,
+             Acceleration,
+             Q,
+@@ -106,7 +118,7 @@ public enum recordType
+         public int historyIdx = -1;
+ 
+         [Persistent(pass = (int)Pass.Global)]
+-        public int historySize = 3000;
++        public int historySize = 10000;
+ 
+         [Persistent(pass = (int)Pass.Global)]
+         public double precision = 0.2;
+@@ -293,6 +305,9 @@ private void Record(int idx)
+             history[idx].downRange = GroundDistanceFromMark();
+             history[idx].speedSurface = vesselState.speedSurface;
+             history[idx].speedOrbital = vesselState.speedOrbital;
++            history[idx].speedVertical = vesselState.speedVertical;
++            history[idx].speedSurfaceHorizontal = vesselState.speedSurfaceHorizontal;
++            history[idx].speedOrbitHorizontal = vesselState.speedOrbitHorizontal;
+             history[idx].acceleration = vessel.geeForce;
+             history[idx].Q = vesselState.dynamicPressure;
+             history[idx].altitudeTrue = vesselState.altitudeTrue;
+diff --git a/MechJeb2/MechJebModuleFlightRecorderGraph.cs b/MechJeb2/MechJebModuleFlightRecorderGraph.cs
+index 7c666ba1..5b083d24 100644
+--- a/MechJeb2/MechJebModuleFlightRecorderGraph.cs
++++ b/MechJeb2/MechJebModuleFlightRecorderGraph.cs
+@@ -256,6 +256,15 @@ protected override void WindowGUI(int windowID)
+             GUI.color = XKCDColors.Apricot;
+             graphStates[(int)recordType.SpeedOrbital].display = GUILayout.Toggle(graphStates[(int)recordType.SpeedOrbital].display, Localizer.Format("#MechJeb_Flightrecord_checkbox8"), GUILayout.ExpandWidth(false));//"Orbital speed"
+ 
++            GUI.color = XKCDColors.Red;
++            graphStates[(int)recordType.SpeedVertical].display = GUILayout.Toggle(graphStates[(int)recordType.SpeedVertical].display, Localizer.Format("#MechJeb_Flightrecord_checkbox32"), GUILayout.ExpandWidth(false));//"Vertical speed"
++
++            GUI.color = XKCDColors.NeonGreen;
++            graphStates[(int)recordType.SpeedSurfaceHorizontal].display = GUILayout.Toggle(graphStates[(int)recordType.SpeedSurfaceHorizontal].display, Localizer.Format("#MechJeb_Flightrecord_checkbox34"), GUILayout.ExpandWidth(false));//"Surafce Horizontal speed"
++
++            GUI.color = XKCDColors.LightBlue;
++            graphStates[(int)recordType.SpeedOrbitHorizontal].display = GUILayout.Toggle(graphStates[(int)recordType.SpeedOrbitHorizontal].display, Localizer.Format("#MechJeb_Flightrecord_checkbox36"), GUILayout.ExpandWidth(false));//"Orbit Horizontal speed"
++
+             GUI.color = XKCDColors.Pink;
+             graphStates[(int)recordType.Mass].display = GUILayout.Toggle(graphStates[(int)recordType.Mass].display, Localizer.Format("#MechJeb_Flightrecord_checkbox9"), GUILayout.ExpandWidth(false));//"Mass"
+ 
+@@ -358,6 +367,29 @@ protected override void WindowGUI(int windowID)
+                 if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedOrbital, Localizer.Format("#MechJeb_Flightrecord_checkbox22"), GUILayout.ExpandWidth(true)))//"ObtVel"
+                     scaleIdx = (int)recordType.SpeedOrbital;
+             }
++            // New!
++            if (graphStates[(int)recordType.SpeedVertical].display)
++            {
++                GUI.color = XKCDColors.Red;
++                //if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedVertical, "VertVel " + MuUtils.ToSI(graphStates[(int)recordType.SpeedVertical].minimum, -1, 3) + " " + MuUtils.ToSI(graphStates[(int)recordType.SpeedVertical].maximum, -1, 3), GUILayout.ExpandWidth(true)))
++                if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedVertical, Localizer.Format("#MechJeb_Flightrecord_checkbox33"), GUILayout.ExpandWidth(true)))//"VertVel"
++                    scaleIdx = (int)recordType.SpeedVertical;
++            }
++            if (graphStates[(int)recordType.SpeedSurfaceHorizontal].display)
++            {
++                GUI.color = XKCDColors.NeonGreen;
++                //if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedSurfaceHorizontal, "SrfHorzVel " + MuUtils.ToSI(graphStates[(int)recordType.SpeedSurfaceHorizontal].minimum, -1, 3) + " " + MuUtils.ToSI(graphStates[(int)recordType.SpeedSurfaceHorizontal].maximum, -1, 3), GUILayout.ExpandWidth(true)))
++                if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedSurfaceHorizontal, Localizer.Format("#MechJeb_Flightrecord_checkbox35"), GUILayout.ExpandWidth(true)))//"SrfHorzVel"
++                    scaleIdx = (int)recordType.SpeedSurfaceHorizontal;
++            }
++            if (graphStates[(int)recordType.SpeedOrbitHorizontal].display)
++            {
++                GUI.color = XKCDColors.LightBlue;
++                //if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedOrbitHorizontal, "ObtHorzVel " + MuUtils.ToSI(graphStates[(int)recordType.SpeedOrbitHorizontal].minimum, -1, 3) + " " + MuUtils.ToSI(graphStates[(int)recordType.SpeedOrbitHorizontal].maximum, -1, 3), GUILayout.ExpandWidth(true)))
++                if (GUILayout.Toggle(scaleIdx == (int)recordType.SpeedOrbitHorizontal, Localizer.Format("#MechJeb_Flightrecord_checkbox37"), GUILayout.ExpandWidth(true)))//"ObtHorzVel"
++                    scaleIdx = (int)recordType.SpeedOrbitHorizontal;
++            }
++            // End-New
+             if (graphStates[(int)recordType.Mass].display)
+             {
+                 GUI.color = XKCDColors.Pink;
+@@ -469,6 +501,14 @@ protected override void WindowGUI(int windowID)
+                     DrawnPath(r, recordType.SpeedSurface, hPos, scaleX, downrange, XKCDColors.Yellow);
+                 if (graphStates[(int)recordType.SpeedOrbital].display)
+                     DrawnPath(r, recordType.SpeedOrbital, hPos, scaleX, downrange, XKCDColors.Apricot);
++                // New!
++                if (graphStates[(int)recordType.SpeedVertical].display)
++                    DrawnPath(r, recordType.SpeedVertical, hPos, scaleX, downrange, XKCDColors.Red);
++                if (graphStates[(int)recordType.SpeedSurfaceHorizontal].display)
++                    DrawnPath(r, recordType.SpeedSurfaceHorizontal, hPos, scaleX, downrange, XKCDColors.NeonGreen);
++                if (graphStates[(int)recordType.SpeedOrbitHorizontal].display)
++                    DrawnPath(r, recordType.SpeedOrbitHorizontal, hPos, scaleX, downrange, XKCDColors.LightBlue);
++                // End-New
+                 if (graphStates[(int)recordType.Mass].display)
+                     DrawnPath(r, recordType.Mass, hPos, scaleX, downrange, XKCDColors.Pink);
+                 if (graphStates[(int)recordType.Q].display)
+@@ -660,6 +700,11 @@ private void ResetScale()
+             graphStates[(int)recordType.Acceleration].minimum = 0;
+             graphStates[(int)recordType.SpeedSurface].minimum = 0;
+             graphStates[(int)recordType.SpeedOrbital].minimum = 0;
++            // New!
++            graphStates[(int)recordType.SpeedVertical].minimum = 0;
++            graphStates[(int)recordType.SpeedSurfaceHorizontal].minimum = 0;
++            graphStates[(int)recordType.SpeedOrbitHorizontal].minimum = 0;
++            // End-New
+             graphStates[(int)recordType.Mass].minimum = 0;
+             graphStates[(int)recordType.Q].minimum = 0;
+             graphStates[(int)recordType.AoA].minimum = -5;
+@@ -677,6 +722,11 @@ private void ResetScale()
+             graphStates[(int)recordType.Acceleration].maximum = 2;
+             graphStates[(int)recordType.SpeedSurface].maximum = 300;
+             graphStates[(int)recordType.SpeedOrbital].maximum = 300;
++            // New!
++            graphStates[(int)recordType.SpeedVertical].maximum = 300;
++            graphStates[(int)recordType.SpeedSurfaceHorizontal].maximum = 300;
++            graphStates[(int)recordType.SpeedOrbitHorizontal].maximum = 300;
++            // End-New
+             graphStates[(int)recordType.Mass].maximum = 5;
+             graphStates[(int)recordType.Q].maximum = 1000;
+             graphStates[(int)recordType.AoA].maximum = 5;
+diff --git a/MechJeb2/VesselState.cs b/MechJeb2/VesselState.cs
+index e92da170..e1b00399 100644
+--- a/MechJeb2/VesselState.cs
++++ b/MechJeb2/VesselState.cs
+@@ -98,12 +98,15 @@ public enum UllageState {
+         public MovingAverage speedOrbital = new MovingAverage();
+         [ValueInfoItem("#MechJeb_SurfaceSpeed", InfoItem.Category.Surface, format = ValueInfoItem.SI, units = "m/s")]//Surface speed
+         public MovingAverage speedSurface = new MovingAverage();
++
+         [ValueInfoItem("#MechJeb_VerticalSpeed", InfoItem.Category.Surface, format = ValueInfoItem.SI, units = "m/s")]//Vertical speed
+         public MovingAverage speedVertical = new MovingAverage();
++
+         [ValueInfoItem("#MechJeb_SurfaceHorizontalSpeed", InfoItem.Category.Surface, format = ValueInfoItem.SI, units = "m/s")]//Surface horizontal speed
+         public MovingAverage speedSurfaceHorizontal = new MovingAverage();
+         [ValueInfoItem("#MechJeb_OrbitHorizontalSpeed", InfoItem.Category.Orbit, format = ValueInfoItem.SI, units = "m/s")]//Orbit horizontal speed
+         public double speedOrbitHorizontal;
++
+         [ValueInfoItem("#MechJeb_Heading", InfoItem.Category.Surface, format = "F1", units = "º")]//Heading
+         public MovingAverage vesselHeading = new MovingAverage();
+         [ValueInfoItem("#MechJeb_Pitch", InfoItem.Category.Surface, format = "F1", units = "º")]//Pitch
+@@ -678,8 +681,10 @@ void UpdateBasicInfo(Vessel vessel)
+ 
+             speedOrbital.value = orbitalVelocity.magnitude;
+             speedSurface.value = surfaceVelocity.magnitude;
++
+             speedVertical.value = Vector3d.Dot(surfaceVelocity, up);
+             speedSurfaceHorizontal.value = Vector3d.Exclude(up, surfaceVelocity).magnitude; //(velocityVesselSurface - (speedVertical * up)).magnitude;
++
+             speedOrbitHorizontal = (orbitalVelocity - (speedVertical * up)).magnitude;
+ 
+             // Angle of Attack, angle between surface velocity and the ship-nose vector (KSP "up" vector) in the plane that has no ship-right/left in it
